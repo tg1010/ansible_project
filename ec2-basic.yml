@@ -4,10 +4,11 @@
     connection: local
     gather_facts: False
     tags: provisioning
-    # Necessary Variables for creating/provisioning the EC2 Instance
+    
+    
     vars:
       instance_type: t2.micro
-      security_group: ansible-web # Change the security group name here
+      security_group: ansible-web 
       image: ami-4836a428 
       keypair: MyKeyPair  
       region: us-west-2
@@ -52,8 +53,10 @@
         register: ec2_info
 
       - name: Add the newly created EC2 instance
+        become: True
+        become_method: sudo
         local_action: lineinfile 
-                      dest="~/hosts" 
+                      dest="/etc/ansible/hosts" 
                       regexp={{ item.public_ip }} 
                       insertafter="[webserver]" line={{ item.public_ip }}
         with_items: "{{ ec2_info.instances }}"
@@ -74,9 +77,10 @@
             Name: webserver
 
   - name: install docker
+    gather_facts: False
     hosts: webserver
     become: True
-    remote_user: root
+    remote_user: ec2-user
     become_method: sudo
     tasks:
 
@@ -91,7 +95,7 @@
       - name: Start docker
         service:
           name: docker
-          state: running
+          state: started
 
       - name: install pip
         easy_install: name=pip
