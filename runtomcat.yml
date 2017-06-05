@@ -1,0 +1,50 @@
+---
+- name: get some containers running
+  hosts: tomcat_ec2
+  tasks:
+
+# test connection - ping VMs
+  - name: ping all VMs
+    ping:
+    become: True
+
+  - name: copy first file to tomcat host
+    become: True
+    become_method: sudo
+    copy:
+      src: /home/ec2-user/tomcat-users.xml
+      dest:  /home/tomcat-users.xml
+      owner: ec2-user
+      group: ec2-user
+      mode: "u+rw,g-rx,o-rwx"
+
+  - name: copy second file to tomcat host
+    become: True
+    become_method: sudo
+    copy:
+      src: /home/ec2-user/context.xml
+      dest:  /home/context.xml
+      owner: ec2-user
+      group: ec2-user
+      mode: "u+rw,g-rx,o-rwx"
+
+
+  - name: create tomcat container
+    docker_container:
+      name: tomcat
+      image: tomcat
+      state: started
+      ports:
+      - "8083:8080"
+
+  - name: copy first file to tomcat container
+    become: True
+    become_method: sudo
+    command: docker cp /home/tomcat-users.xml tomcat:/usr/local/tomcat/conf/tomcat-users.xml 
+
+  - name: copy second file to tomcat container
+    become: True
+    become_method: sudo
+    command: docker cp /home/context.xml tomcat:/usr/local/tomcat/webapps/manager/META-INF/context.xml
+
+

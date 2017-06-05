@@ -1,0 +1,19 @@
+---
+- name: get some containers running
+  hosts: nexus_ec2
+  tasks:
+
+# test connection - ping VMs
+  - name: ping all VMs
+    ping:
+    become: True
+
+  - name: create nexus container
+    docker_container:
+      name: nexus
+      image: sonatype/nexus
+      state: started
+      ports:
+      - "8082:8081"
+
+  

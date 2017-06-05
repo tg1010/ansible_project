@@ -1,0 +1,9 @@
+---
+  - name: run all
+    hosts: localhost
+    gather_facts: no  
+  - include: ec2-basic.yml
+  - include: runjenkins.yml
+  - include: runtomcat.yml
+  - include: runsonar.yml
+  - include: runnexus.yml

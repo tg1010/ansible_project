@@ -1,0 +1,22 @@
+---
+- name: get some containers running
+  hosts: jenkins_ec2 
+  tasks:
+
+# test connection - ping VMs
+  - name: ping all VMs
+    ping:
+    become: True
+
+#  launch dockers
+    
+
+  - name: create jenkins container
+    docker_container:
+      name: jenkins-master
+      image: jenkins
+      state: started
+      ports:
+      - "8080:8080"
+  
+

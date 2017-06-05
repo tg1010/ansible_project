@@ -1,0 +1,19 @@
+---
+- name: get some containers running
+  hosts: sonarqube_ec2
+  tasks:
+
+# test connection - ping VMs
+  - name: ping all VMs
+    ping:
+    become: True
+
+  - name: create sonarqube container
+    docker_container:
+      name: sonarqube
+      image: sonarqube:latest
+      state: started
+      ports:
+      - "9000:9000"
+
+

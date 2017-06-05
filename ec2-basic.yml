@@ -7,16 +7,21 @@
     
     
     vars:
+   # Variables that will be used in the launch of the EC2 instances. Can also set number to launch
       instance_type: t2.micro
-      security_group: ansible-web 
+      security_group: ansible-web-2
+   # This is just the basic amazon linux image, if changed the user to ssh in will need to be changed
       image: ami-4836a428 
       keypair: MyKeyPair  
       region: us-west-2
-      count: 1
+      count: 4 
 
-    # Task that will be used to Launch/Create an EC2 Instance
+    # Tasks that will be used to create security group, launch an instance, add it to the inventory
+    # then wait for ssh available and give it a name in the aws console.
     tasks:
 
+       # Creates a security group this can be condensed in version 2.4 of ansible by using 'ports'
+       # to do multiple at a time, instead of 'from_port' , 'to_port'
       - name: Create a security group
         local_action: 
           module: ec2_group
@@ -36,11 +41,28 @@
               from_port: 443
               to_port: 443
               cidr_ip: 0.0.0.0/0
+            - proto: tcp
+              from_port: 8080
+              to_port: 8080
+              cidr_ip: 0.0.0.0/0
+            - proto: tcp
+              from_port: 8082
+              to_port: 8082
+              cidr_ip: 0.0.0.0/0
+            - proto: tcp
+              from_port: 8083
+              to_port: 8083
+              cidr_ip: 0.0.0.0/0
+            - proto: tcp
+              from_port: 9000
+              to_port: 9000
+              cidr_ip: 0.0.0.0/0
           rules_egress:
             - proto: all
               cidr_ip: 0.0.0.0/0
         register: basic_firewall
-
+      
+       # Launches the EC2 instances using variables set before 
       - name: Launch the new EC2 Instance
         local_action: ec2 
                       group={{ security_group }} 
@@ -51,17 +73,22 @@
                       keypair={{ keypair }}
                       count={{count}}
         register: ec2_info
-
+      
+       # Adds the instance to inventory hosts file 
       - name: Add the newly created EC2 instance
         become: True
         become_method: sudo
         local_action: lineinfile 
                       dest="/etc/ansible/hosts" 
-                      regexp={{ item.public_ip }} 
-                      insertafter="[webserver]" line={{ item.public_ip }}
-        with_items: "{{ ec2_info.instances }}"
-
-
+                      regexp={{ item.instance_info.public_ip }} 
+                      insertafter={{ item.aws_name }} line={{ item.instance_info.public_ip }}
+        with_items: 
+          - { instance_info: "{{ ec2_info.instances[0] }}", aws_name: '\[jenkins_ec2\]\s+' }
+          - { instance_info: "{{ ec2_info.instances[1] }}", aws_name: '\[tomcat_ec2\]\s+' }
+          - { instance_info: "{{ ec2_info.instances[2] }}", aws_name: '\[sonarqube_ec2\]\s+' }
+          - { instance_info: "{{ ec2_info.instances[3] }}", aws_name: '\[nexus_ec2\]\s+' }
+      
+       # Need to wait for ssh to be available for next play
       - name: Wait for SSH to come up
         local_action: wait_for 
                       host={{ item.public_ip }} 
@@ -69,17 +96,34 @@
                       state=started
         with_items: "{{ ec2_info.instances }}"
 
+
+       # Names each instance individually, if changing the count the with items will need to be
+       # adjusted as well  
       - name: Add tag to Instance(s)
-        local_action: ec2_tag resource={{ item.id }} region={{ region }} state=present
-        with_items: "{{ ec2_info.instances }}"
+        local_action: ec2_tag resource={{ item.instance_info.id }} region={{ region }} state=present
+        with_items:
+          - { instance_info: "{{ ec2_info.instances[0] }}", aws_name: 'jenkins_ec2' }
+          - { instance_info: "{{ ec2_info.instances[1] }}", aws_name: 'tomcat_ec2' }
+          - { instance_info: "{{ ec2_info.instances[2] }}", aws_name: 'sonarqube_ec2' }
+          - { instance_info: "{{ ec2_info.instances[3] }}", aws_name: 'nexus_ec2' }
         args:
           tags:
-            Name: webserver
+            Name: "{{ item.aws_name }}" 
+        
+       # When the inventory is first loaded for the playbook the EC2 hosts that we just added
+       # aren't in it so the inventory needs to be refreshed 
+      - meta: refresh_inventory
 
+
+   # This play installs docker, pip and docker-py, it also starts docker and changes it's permissions
+   # 'pipeline' is the top level hostname for the ec2 instances they are all children of it
+   # so they are included
   - name: install docker
     gather_facts: False
-    hosts: webserver
+    hosts: pipeline
     become: True
+   # This is the username that you ssh with for amazon linux it's ec2-user.
+   # It'll be different depending on the distribution which you pick with the image ami number
     remote_user: ec2-user
     become_method: sudo
     tasks:
@@ -90,14 +134,17 @@
           update_cache: yes
         with_items:
           - python-setuptools
-          - docker
+          - docker    
 
       - name: Start docker
         service:
           name: docker
           state: started
+     
+      - name: Give docker permissions to run without sudo
+        shell: usermod -aG docker ec2-user
 
-      - name: install pip
+      - name: Install pip
         easy_install: name=pip
 
       - name: Install docker-py to latest
